@@ -1,0 +1,21 @@
+{
+  "configurations": [
+    {
+      "name": "windows-gcc-x64",
+      "includePath": [
+        "${workspaceFolder}/**",
+        "E:\\GLpygame",
+        "C:\\GL\\include",
+        "D:\\freetype-2.12.1\\include"
+      ],
+      "compilerPath": "D:/DVCp/MinGW64/bin/gcc.exe",
+      "cStandard": "${default}",
+      "cppStandard": "c++17",
+      "intelliSenseMode": "windows-gcc-x64",
+      "compilerArgs": [
+        ""
+      ]
+    }
+  ],
+  "version": 4
+}
