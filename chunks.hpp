@@ -4,6 +4,11 @@
 #include<array>
 #include"blocks.hpp"
 namespace blocky{
+    glm::vec3 inline fix_z(glm::vec3 in){
+        glm::vec3 fxd = in;
+        fxd.z = -fxd.z;
+        return fxd;
+    }
     int BUILD_LIMIT = 512;
     const constexpr int CHUNK_SIZE = 16;
     class Chunk{
@@ -59,14 +64,14 @@ namespace blocky{
                 }
             }
             std::optional<glm::ivec3> rayCast(glm::vec3 playergamepos,glm::vec3 gamelookvec,glm::vec3 loc_of_this,float reach){
-                glm::vec3 p = playergamepos-loc_of_this,check;
+                glm::vec3 p = playergamepos-fix_z(loc_of_this),check;
                 for(float d=0;d<reach;d+=0.05){
                     check = p+gamelookvec*d;
                     auto bpos = get_blockpos(check);
                     if(!bpos.has_value())continue;
                     glm::ivec3 bbpos = bpos.value();
                     if(!at(bbpos.x,bbpos.y,bbpos.z)->getType()
-                        ->getModel()->getHitbox().contains(check-glm::vec3(bbpos.x,bbpos.y,-bbpos.z)))continue;
+                        ->getModel()->getHitbox().contains(check-glm::vec3(bbpos.x,bbpos.y,bbpos.z)))continue;
                     return bbpos;
                 }
                 return std::optional<glm::ivec3>();//no value
