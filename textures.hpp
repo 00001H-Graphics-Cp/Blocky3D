@@ -7,14 +7,17 @@
 #include<GLFW/glfw3.h>
 namespace blocky{
     class AnimatedTexture{
-        std::vector<pygame::pTexture> frames;
+        std::vector<pygame::prTexture> frames;
         float fps;
         bool hasTransparentFrames=false;
         public:
             AnimatedTexture(float fps=20.0) : fps(fps){}
-            AnimatedTexture& addFrame(pygame::pTexture frame,bool transparent=false){
+            AnimatedTexture(pygame::prTexture frm,float fps=20.0) : fps(fps){
+                addFrame(frm);
+            }
+            AnimatedTexture& addFrame(pygame::prTexture frame){
                 frames.push_back(frame);
-                hasTransparentFrames |= transparent;
+                hasTransparentFrames |= (frame.alpha<1.0);
                 return *this;
             }
             void makeOpaque(){
@@ -23,22 +26,22 @@ namespace blocky{
             void makeTransparent(){
                 hasTransparentFrames = true;
             }
-            const pygame::pTexture& operator[](int frm) const{
+            const pygame::prTexture& operator[](int frm) const{
                 return frames.at(frm);
             }
-            pygame::pTexture& operator[](int frm){
-                return const_cast<pygame::pTexture&>(operator[](frm));
+            pygame::prTexture& operator[](int frm){
+                return const_cast<pygame::prTexture&>(operator[](frm));
             }
-            const pygame::pTexture& curFrame() const{
+            const pygame::prTexture& curFrame() const{
                 return frames.at(static_cast<int>(glfwGetTime()*fps)%frames.size());
             }
-            pygame::pTexture& curFrame(){
-                return const_cast<pygame::pTexture&>(const_cast<const AnimatedTexture&>(*this).curFrame());
+            pygame::prTexture& curFrame(){
+                return const_cast<pygame::prTexture&>(const_cast<const AnimatedTexture&>(*this).curFrame());
             }
             bool isTransparent() const{
                 return hasTransparentFrames;
             }
-            void setFrame(int frm,pygame::pTexture frame){
+            void setFrame(int frm,pygame::prTexture frame){
                 frames.at(frm) = frame;
             }
     };
