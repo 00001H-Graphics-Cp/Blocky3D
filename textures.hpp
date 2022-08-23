@@ -6,6 +6,8 @@
 #include<glad/glad.h>
 #include<GLFW/glfw3.h>
 namespace blocky{
+    class AnimatedTexture;
+    typedef std::shared_ptr<AnimatedTexture> pAnimatedTexture;
     class AnimatedTexture{
         std::vector<pygame::prTexture> frames;
         float fps;
@@ -44,7 +46,10 @@ namespace blocky{
             void setFrame(int frm,pygame::prTexture frame){
                 frames.at(frm) = frame;
             }
+            static pAnimatedTexture inline mkP(pygame::prTexture);
     };
-    typedef std::shared_ptr<AnimatedTexture> pAnimatedTexture;
+    pAnimatedTexture inline AnimatedTexture::mkP(pygame::prTexture frame){
+        return std::make_shared<AnimatedTexture>(frame);
+    }
 }
 #endif
