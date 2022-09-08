@@ -5,12 +5,13 @@
       "includePath": [
         "${workspaceFolder}/**",
         "E:\\GLpygame",
+        "E:\\",
         "C:\\GL\\include",
         "D:\\freetype-2.12.1\\include"
       ],
-      "compilerPath": "D:/DVCp/MinGW64/bin/gcc.exe",
+      "compilerPath": "D:\\msys64\\mingw64\\bin\\gcc.exe",
       "cStandard": "${default}",
-      "cppStandard": "c++17",
+      "cppStandard": "c++23",
       "intelliSenseMode": "windows-gcc-x64",
       "compilerArgs": [
         ""
