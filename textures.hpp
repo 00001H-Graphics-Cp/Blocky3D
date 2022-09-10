@@ -6,16 +6,18 @@
 #include<glad/glad.h>
 #include<GLFW/glfw3.h>
 namespace blocky{
-    class AnimatedTexture{
+    class GameTexture;
+    typedef std::shared_ptr<GameTexture> pGameTexture;
+    class GameTexture{
         std::vector<pygame::prTexture> frames;
         float fps;
         bool hasTransparentFrames=false;
         public:
-            AnimatedTexture(float fps=20.0) : fps(fps){}
-            AnimatedTexture(pygame::prTexture frm,float fps=20.0) : fps(fps){
+            GameTexture(float fps=20.0) : fps(fps){}
+            GameTexture(pygame::prTexture frm,float fps=20.0) : fps(fps){
                 addFrame(frm);
             }
-            AnimatedTexture& addFrame(pygame::prTexture frame){
+            GameTexture& addFrame(pygame::prTexture frame){
                 frames.push_back(frame);
                 hasTransparentFrames |= (frame.alpha<1.0);
                 return *this;
@@ -36,7 +38,7 @@ namespace blocky{
                 return frames.at(static_cast<int>(glfwGetTime()*fps)%frames.size());
             }
             pygame::prTexture& curFrame(){
-                return const_cast<pygame::prTexture&>(const_cast<const AnimatedTexture&>(*this).curFrame());
+                return const_cast<pygame::prTexture&>(const_cast<const GameTexture&>(*this).curFrame());
             }
             bool isTransparent() const{
                 return hasTransparentFrames;
@@ -44,7 +46,10 @@ namespace blocky{
             void setFrame(int frm,pygame::prTexture frame){
                 frames.at(frm) = frame;
             }
+            static pGameTexture inline mkP(pygame::prTexture);
     };
-    typedef std::shared_ptr<AnimatedTexture> pAnimatedTexture;
+    pGameTexture inline GameTexture::mkP(pygame::prTexture frame){
+        return std::make_shared<GameTexture>(frame);
+    }
 }
 #endif

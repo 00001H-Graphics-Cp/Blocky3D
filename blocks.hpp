@@ -4,12 +4,20 @@
 #include<string>
 #include<vector>
 #include<unordered_map>
-#include<gsdl.hpp>
-#include"helper.hpp"
+#include<utility>
+#include<optional>
+#include<pygame.hpp>
 #include"json.hpp"
 #include"textures.hpp"
 #include<glm/glm.hpp>
 namespace blocky{
+    std::string wtos(std::wstring inp){
+        size_t leng = std::wcstombs(nullptr,inp.data(),99999);
+        std::string dest;
+        dest.resize(leng);
+        std::wcstombs(dest.data(),inp.data(),leng);
+        return dest;
+    }
     #define inrng(x,lwr,upr) ((x<upr)&&(x>lwr))
     class Hitbox{
         glm::vec3 pos_;
@@ -42,10 +50,65 @@ namespace blocky{
     class Direction{
         public:
             enum _Direction{
-                FRONT=0,BACK=1,LEFT=2,RIGHT=3,TOP=4,BOTTOM=5
+                FRONT=0,BACK=1,LEFT=2,RIGHT=3,UP=4,DOWN=5,NONE=6
             };
             Direction() = default;
             Direction(_Direction dir) : _direc(dir){}
+            static void selftest(){
+                #ifndef NDEBUG
+                glm::ivec3 a(0,1,2);
+                glm::ivec3 b(1,1,2);
+                assert(from_ray(a,b)==RIGHT);
+                assert(from_ray(a,b).next_to(a) == b);
+                #endif
+            }
+            glm::ivec3 next_to(glm::ivec3 pos) const{
+                switch(_direc){
+                    case UP:return pos+glm::ivec3(0,1,0);
+                    case DOWN:return pos-glm::ivec3(0,1,0);
+                    case LEFT:return pos-glm::ivec3(1,0,0);
+                    case RIGHT:return pos+glm::ivec3(1,0,0);
+                    case FRONT:return pos+glm::ivec3(0,0,1);
+                    case BACK:return pos-glm::ivec3(0,0,1);
+                    case NONE:return pos;
+                    default:throw blocky_error("Internal Error : "+std::to_string(__LINE__)+" : "+__FILE__);
+                }
+            }
+            std::string tostr() const{
+                #define _Case(x) case x:return #x
+                switch(_direc){
+                    _Case(UP);
+                    _Case(DOWN);
+                    _Case(LEFT);
+                    _Case(RIGHT);
+                    _Case(FRONT);
+                    _Case(BACK);
+                    _Case(NONE);
+                    default:throw blocky_error("Internal Error : "+std::to_string(__LINE__)+" : "+__FILE__);
+                }
+            }
+            static Direction from_ivec3(glm::ivec3 dir){
+                int count = ((dir.x!=0)+(dir.y!=0)+(dir.z!=0));
+                if(count==0){
+                    return NONE;
+                }
+                if(count>1){
+                    std::cerr << "Warning::Direction::from_ivec3() : " << std::to_string(__LINE__)
+                              << " : " << __FILE__ << "Invalid ivec3" << std::endl;
+                    return NONE;
+                }
+                if(dir.x>0)return RIGHT;
+                if(dir.x<0)return LEFT;
+                if(dir.y>0)return UP;
+                if(dir.y<0)return DOWN;
+                if(dir.z>0)return FRONT;
+                if(dir.z<0)return BACK;
+                std::cout << "Invoking undefined behavior" << std::endl;
+                std::unreachable();
+            }
+            static Direction from_ray(glm::ivec3 a,glm::ivec3 b){
+                return from_ivec3(b-a);
+            }
             constexpr operator _Direction() const{
                 return _direc;
             }
@@ -56,9 +119,10 @@ namespace blocky{
                     case BACK:return FRONT;
                     case LEFT:return RIGHT;
                     case RIGHT:return LEFT;
-                    case TOP:return BOTTOM;
-                    case BOTTOM:return TOP;
-                    default:throw blocky_error("Internal Error on line "+std::to_string(__LINE__));
+                    case UP:return DOWN;
+                    case DOWN:return UP;
+                    case NONE:return NONE;
+                    default:throw blocky_error("Internal Error : "+std::to_string(__LINE__)+" : "+__FILE__);
                 }
             }
         private:
@@ -76,6 +140,7 @@ namespace blocky{
     typedef std::shared_ptr<Model> pModel;
     typedef std::shared_ptr<SolidModel> pSolidModel;
     typedef std::shared_ptr<BlockType> pBlockType;
+    typedef std::unique_ptr<BlockType> upBlockType;
     typedef std::shared_ptr<Block> pBlock;
     typedef std::shared_ptr<OneFaceModel> pOneFaceModel;
     typedef std::shared_ptr<NothingModel> pNothingModel;
@@ -86,14 +151,13 @@ namespace blocky{
             std::shared_ptr<DictJson> CustomProperties;
             pModel model;
             pBlockState defaultState;
-            std::vector<pAnimatedTexture> texture_storage;
-            std::string id;
+            std::vector<pGameTexture> texture_storage;
+            std::wstring id;
+            static pBlockType PLACEHOLDER_BLOCK;
         public:
-            static pBlockType constructWithId(std::string id){
-                pBlockType bt = std::make_shared<BlockType>();
-                bt->id = id;
-                return bt;
+            BlockType(std::wstring id) : id(id){
             }
+            static inline pBlockType default_block();
             BlockType(const BlockType& other){
                 rottype = other.rottype;
                 CustomProperties = other.CustomProperties;
@@ -101,10 +165,7 @@ namespace blocky{
                 defaultState = other.defaultState;
                 id = other.id;
             }
-            BlockType(){
-                defaultState = std::make_shared<BlockState>();
-            }
-            std::string getID() const{
+            const std::wstring& getID() const{
                 return id;
             }
             Rotatability getRotatability() const{
@@ -119,10 +180,18 @@ namespace blocky{
             const pModel& getModel() const{
                 return model;
             }
-            const std::vector<pAnimatedTexture>& getTextures() const{
+            const std::vector<pGameTexture>& getTextures() const{
                 return texture_storage;
             }
+            bool isFaceTransparent(Direction face,std::optional<pBlockState> opt_bs=std::optional<pBlockState>()) const;
     };
+    pBlockType BlockType::PLACEHOLDER_BLOCK=nullptr;
+    pBlockType BlockType::default_block(){
+        if(PLACEHOLDER_BLOCK==nullptr){
+            PLACEHOLDER_BLOCK = std::make_shared<BlockType>(L"blocky3d:placeholder");
+        }
+        return PLACEHOLDER_BLOCK;
+    }
     class Block{
         pBlockType type;
         pBlockState state;
@@ -134,6 +203,9 @@ namespace blocky{
             const pBlockType& getType() const{
                 return type;
             }
+            auto getModel() const{
+                return type->getModel();
+            }
             const pBlockState& getState() const{
                 return state;
             }
@@ -142,7 +214,10 @@ namespace blocky{
                 pBlock infront=nullptr,pBlock atback=nullptr,
                 pBlock onleft=nullptr,pBlock onright=nullptr,
                 pBlock ontop=nullptr,pBlock atbottom=nullptr) const;
-        };
+            bool isFaceTransparent(Direction face) const{
+                return type->isFaceTransparent(face,state);
+            }
+    };
     class BlockState{
         std::shared_ptr<DictJson> state;
         public:
@@ -156,73 +231,66 @@ namespace blocky{
     class Model{
         public:
             virtual bool isFaceTransparent(Direction face,pBlockState bs,
-            const std::vector<pAnimatedTexture>& tt) const = 0;
+            const std::vector<pGameTexture>& tt) const = 0;
             virtual void drawFace(Direction face,pBlockState bs,
-            const std::vector<pAnimatedTexture>& tt,glm::vec3 loc) const = 0;
+            const std::vector<pGameTexture>& tt,glm::vec3 loc) const = 0;
             virtual bool shouldCullFace(Direction face,pBlockState bs,
-            const std::vector<pAnimatedTexture>& tt,
+            const std::vector<pGameTexture>& tt,
             pBlock next_to) const{
-//******CANDIDATE FOR CLEANUP//TRAIN WRECKS(a.getB().getC().doSomething())
                 if(next_to==nullptr)return false;
                 return !(
-(next_to->getType()->getModel()->
-isFaceTransparent(
-face.opposite(),next_to->getState(),
-next_to->getType()->getTextures()))
-&&(
-next_to->getType()->getModel()->isFaceTransparent(face,next_to->getState(),
-next_to->getType()->getTextures()))
-);
+(next_to->isFaceTransparent(face.opposite()))
+&&(next_to->isFaceTransparent(face)));
             }
             virtual void drawFaceIfNeccesary(Direction face,pBlockState bs,
-            const std::vector<pAnimatedTexture>& tt,glm::vec3 loc,
-            pBlock next_to) const{
+            const std::vector<pGameTexture>& tt,glm::vec3 loc,
+            pBlock next_to) const final{
                 if(!shouldCullFace(face,bs,tt,next_to))drawFace(face,bs,tt,loc);
-                else{
-                    if(next_to!=nullptr)return;
-                    #include<iostream>
-                    std::cout << "Debug: Face Culled";
-                    throw blocky_error("FACE CULLED: DEBUG EXCEPTION(trapped)");
-                }
             }
             virtual void draw(pBlockState bs,
-            const std::vector<pAnimatedTexture>& tt,glm::vec3 loc) const{
+            const std::vector<pGameTexture>& tt,glm::vec3 loc) const{
                 drawFace(Direction::FRONT,bs,tt,loc);
                 drawFace(Direction::BACK,bs,tt,loc);
                 drawFace(Direction::LEFT,bs,tt,loc);
                 drawFace(Direction::RIGHT,bs,tt,loc);
-                drawFace(Direction::TOP,bs,tt,loc);
-                drawFace(Direction::BOTTOM,bs,tt,loc);
+                drawFace(Direction::UP,bs,tt,loc);
+                drawFace(Direction::DOWN,bs,tt,loc);
             }
             virtual void drawIfNeccesary(pBlockState bs,
-            const std::vector<pAnimatedTexture>& tt,glm::vec3 loc,
+            const std::vector<pGameTexture>& tt,glm::vec3 loc,
             pBlock front,pBlock back,pBlock left,pBlock right,pBlock top,pBlock bottom)
             const{
                 drawFaceIfNeccesary(Direction::FRONT,bs,tt,loc,front);
                 drawFaceIfNeccesary(Direction::BACK,bs,tt,loc,back);
                 drawFaceIfNeccesary(Direction::LEFT,bs,tt,loc,left);
                 drawFaceIfNeccesary(Direction::RIGHT,bs,tt,loc,right);
-                drawFaceIfNeccesary(Direction::TOP,bs,tt,loc,top);
-                drawFaceIfNeccesary(Direction::BOTTOM,bs,tt,loc,bottom);
+                drawFaceIfNeccesary(Direction::UP,bs,tt,loc,top);
+                drawFaceIfNeccesary(Direction::DOWN,bs,tt,loc,bottom);
             };
-            virtual Hitbox getHitbox() const = 0;
-            virtual ~Model() = default;
+            virtual bool phys_at(glm::ivec3 subvox) const = 0;
+            virtual bool contains(glm::vec3 subpos) final{
+                return phys_at(glm::floor(subpos*16.0f));
+            }
+            virtual ~Model(){};
     };
+    bool inline BlockType::isFaceTransparent(Direction face,std::optional<pBlockState> opt_bs) const{
+            return model->isFaceTransparent(face,opt_bs.value_or(getDefaultState()),getTextures());
+        }
     class SolidModel : public Model{
         public:
-            virtual Hitbox getHitbox() const override{
-                return Hitbox(glm::vec3(0.0),glm::vec3(1.0));
+            virtual bool phys_at(glm::ivec3 subvox) const override{
+                return true;
             }
-            virtual const pAnimatedTexture& faceOf(Direction face,pBlockState bs,
-            const std::vector<pAnimatedTexture>& tt) const{
+            virtual const pGameTexture& faceOf(Direction face,pBlockState bs,
+            const std::vector<pGameTexture>& tt) const{
                 return tt.at(static_cast<int>(face));
             }
             virtual bool isFaceTransparent(Direction face,pBlockState bs,
-            const std::vector<pAnimatedTexture>& tt) const override{
+            const std::vector<pGameTexture>& tt) const override{
                 return faceOf(face,bs,tt)->isTransparent();
             }
             virtual void drawFace(Direction face,pBlockState bs,
-            const std::vector<pAnimatedTexture>& tt,glm::vec3 loc) const override{
+            const std::vector<pGameTexture>& tt,glm::vec3 loc) const override{
                 glm::vec3 bleft,bright,tleft,tright;
                 bleft = loc;
                 switch(face){
@@ -243,9 +311,9 @@ next_to->getType()->getTextures()))
                         }
                         break;
                     };
-                    case Direction::TOP:[[fallthrough]];
-                    case Direction::BOTTOM:{
-                        if(face==Direction::TOP){
+                    case Direction::UP:[[fallthrough]];
+                    case Direction::DOWN:{
+                        if(face==Direction::UP){
                             bleft.y += BLOCK_SIZE_GL;
                         }
                         bleft.z += BLOCK_SIZE_GL;
@@ -258,10 +326,10 @@ next_to->getType()->getTextures()))
 
                         tright = tleft;
                         tright.x += BLOCK_SIZE_GL;
-                        if(face==Direction::TOP){
+                        if(face==Direction::UP){
                             std::swap(bright,bleft);
                             std::swap(tright,tleft);
-                        }else if(face==Direction::BOTTOM){
+                        }else if(face==Direction::DOWN){
                             std::swap(bleft,tright);
                             std::swap(tleft,bright);
                         }
@@ -295,21 +363,21 @@ next_to->getType()->getTextures()))
             }
     };
     class OneFaceModel : public SolidModel{
-virtual const pAnimatedTexture& faceOf(Direction face,pBlockState bs,
-            const std::vector<pAnimatedTexture>& tt) const override{
+virtual const pGameTexture& faceOf(Direction face,pBlockState bs,
+            const std::vector<pGameTexture>& tt) const override{
                 return tt.at(0);
             }
     };
     class NothingModel : public Model{
-            virtual Hitbox getHitbox() const override{
-                return Hitbox(glm::vec3(0.0),glm::vec3(0.0));
+            virtual bool phys_at(glm::ivec3 subvox) const override{
+                return false;
             }
             virtual bool isFaceTransparent(Direction face,pBlockState bs,
-            const std::vector<pAnimatedTexture>& tt) const override{
+            const std::vector<pGameTexture>& tt) const override{
                 return true;
             }
             virtual void drawFace(Direction face,pBlockState bs,
-            const std::vector<pAnimatedTexture>& tt,glm::vec3 loc) const override{
+            const std::vector<pGameTexture>& tt,glm::vec3 loc) const override{
                 return;
             }
     };
@@ -317,14 +385,21 @@ virtual const pAnimatedTexture& faceOf(Direction face,pBlockState bs,
     pOneFaceModel ONEFACE_MODEL = std::make_shared<OneFaceModel>();
     pNothingModel NOTHING_MODEL = std::make_shared<NothingModel>();
     
-    #define pat pAnimatedTexture
-    std::vector<pAnimatedTexture> inline makeSolidTextures(pat front,pat back,pat left,pat right,pat top,pat bottom){
-        return vectorOf<pat>(front,back,left,right,top,bottom);
+    #define pgt pGameTexture
+    auto inline makeSolidTextures(pgt front,pgt back,pgt left,pgt right,pgt top,pgt bottom){
+        auto patl = new std::vector<pGameTexture>();
+        patl->push_back(front);
+        patl->push_back(back);
+        patl->push_back(left);
+        patl->push_back(right);
+        patl->push_back(top);
+        patl->push_back(bottom);
+        return std::unique_ptr<std::vector<pGameTexture>>(patl);
     }
     #define prt pygame::prTexture
-    #define mks(xxx) std::make_shared<AnimatedTexture>(xxx)
-    std::vector<pAnimatedTexture> inline makeSolidTextures(prt front,prt back,prt left,prt right,prt top,prt bottom){
-        return vectorOf<pat>(
+    #define mks(xxx) std::make_shared<GameTexture>(xxx)
+    auto inline makeSolidTextures(prt front,prt back,prt left,prt right,prt top,prt bottom){
+        return makeSolidTextures(
             mks(front),
             mks(back),
             mks(left),
@@ -335,31 +410,32 @@ virtual const pAnimatedTexture& faceOf(Direction face,pBlockState bs,
     }
     #undef mks
     #undef prt
-    #undef pat
+    #undef pgt
     namespace{
-        std::unordered_map<std::string,pBlockType> block_registry;
+        std::unordered_map<std::wstring,std::shared_ptr<BlockType>> block_registry;
     }
-    const pBlockType DEFAULT_BLOCKTYPE = BlockType::constructWithId("blocky3d:placeholder");
-    void registerBlock(pBlockType bt){
-        block_registry.insert_or_assign(bt->getID(),bt);
+    pBlockType const DEFAULT_BLOCKTYPE = BlockType::default_block();
+    void registerBlockType(upBlockType bt){
+        std::wstring id = bt->getID();
+        block_registry.insert_or_assign(id,std::shared_ptr<BlockType>(bt.release()));
     }
-    pBlockType getBlockType(std::string id){
-        if(id=="blocky:placeholder"){
+    pBlockType getBlock(std::wstring id){
+        if(id==BlockType::default_block()->getID()){
             return DEFAULT_BLOCKTYPE;
         }
         return block_registry.at(id);
     }
     class BlockTypeBuilder{
-        pBlockType thetype;
+        upBlockType thetype;
         public:
             BlockTypeBuilder(pBlockType blocktypebase=DEFAULT_BLOCKTYPE){
-                thetype = blocktypebase;
+                thetype = std::make_unique<BlockType>(*blocktypebase);
             }
-            BlockTypeBuilder(std::string id){
-                thetype = std::make_shared<BlockType>(*DEFAULT_BLOCKTYPE);
+            BlockTypeBuilder(std::wstring id){
+                thetype = std::unique_ptr<BlockType>(new BlockType(*DEFAULT_BLOCKTYPE));
                 thetype->id = id;
             }
-            BlockTypeBuilder& id(std::string id){
+            BlockTypeBuilder& id(std::wstring id){
                 thetype->id = id;
                 return *this;
             }
@@ -371,12 +447,21 @@ virtual const pAnimatedTexture& faceOf(Direction face,pBlockState bs,
                 thetype->model = mt;
                 return *this;
             }
-            BlockTypeBuilder& textures(std::vector<pAnimatedTexture> textures){
+            BlockTypeBuilder& textures(const std::vector<pGameTexture>& textures){
                 thetype->texture_storage = textures;
                 return *this;
             }
-            pBlockType finalize() const{
-                return thetype;
+            BlockTypeBuilder& textures(std::unique_ptr<std::vector<pGameTexture>> textures){
+                thetype->texture_storage = *textures;
+                return *this;
+            }
+            BlockTypeBuilder& textures(const pGameTexture& texture){
+                thetype->texture_storage.clear();
+                thetype->texture_storage.push_back(texture);
+                return *this;
+            }
+            upBlockType finalize(){
+                return std::move(thetype);
             }
     };
     void inline Block::display_singleblock(glm::vec3 pos) const{
@@ -392,6 +477,9 @@ virtual const pAnimatedTexture& faceOf(Direction face,pBlockState bs,
     }
     pBlock copyBlock(pBlock src){
         return std::make_shared<Block>(*src);
+    }
+    pBlock makeBlock(std::wstring id){
+        return std::make_shared<Block>(getBlock(id));
     }
 }
 #endif// BLOCKY3DBLOCKS
