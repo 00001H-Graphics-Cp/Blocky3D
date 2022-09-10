@@ -4,6 +4,7 @@
 #include<string>
 #include<vector>
 #include<unordered_map>
+#include<utility>
 #include<optional>
 #include<pygame.hpp>
 #include"json.hpp"
@@ -49,10 +50,65 @@ namespace blocky{
     class Direction{
         public:
             enum _Direction{
-                FRONT=0,BACK=1,LEFT=2,RIGHT=3,TOP=4,BOTTOM=5
+                FRONT=0,BACK=1,LEFT=2,RIGHT=3,UP=4,DOWN=5,NONE=6
             };
             Direction() = default;
             Direction(_Direction dir) : _direc(dir){}
+            static void selftest(){
+                #ifndef NDEBUG
+                glm::ivec3 a(0,1,2);
+                glm::ivec3 b(1,1,2);
+                assert(from_ray(a,b)==RIGHT);
+                assert(from_ray(a,b).next_to(a) == b);
+                #endif
+            }
+            glm::ivec3 next_to(glm::ivec3 pos) const{
+                switch(_direc){
+                    case UP:return pos+glm::ivec3(0,1,0);
+                    case DOWN:return pos-glm::ivec3(0,1,0);
+                    case LEFT:return pos-glm::ivec3(1,0,0);
+                    case RIGHT:return pos+glm::ivec3(1,0,0);
+                    case FRONT:return pos+glm::ivec3(0,0,1);
+                    case BACK:return pos-glm::ivec3(0,0,1);
+                    case NONE:return pos;
+                    default:throw blocky_error("Internal Error : "+std::to_string(__LINE__)+" : "+__FILE__);
+                }
+            }
+            std::string tostr() const{
+                #define _Case(x) case x:return #x
+                switch(_direc){
+                    _Case(UP);
+                    _Case(DOWN);
+                    _Case(LEFT);
+                    _Case(RIGHT);
+                    _Case(FRONT);
+                    _Case(BACK);
+                    _Case(NONE);
+                    default:throw blocky_error("Internal Error : "+std::to_string(__LINE__)+" : "+__FILE__);
+                }
+            }
+            static Direction from_ivec3(glm::ivec3 dir){
+                int count = ((dir.x!=0)+(dir.y!=0)+(dir.z!=0));
+                if(count==0){
+                    return NONE;
+                }
+                if(count>1){
+                    std::cerr << "Warning::Direction::from_ivec3() : " << std::to_string(__LINE__)
+                              << " : " << __FILE__ << "Invalid ivec3" << std::endl;
+                    return NONE;
+                }
+                if(dir.x>0)return RIGHT;
+                if(dir.x<0)return LEFT;
+                if(dir.y>0)return UP;
+                if(dir.y<0)return DOWN;
+                if(dir.z>0)return FRONT;
+                if(dir.z<0)return BACK;
+                std::cout << "Invoking undefined behavior" << std::endl;
+                std::unreachable();
+            }
+            static Direction from_ray(glm::ivec3 a,glm::ivec3 b){
+                return from_ivec3(b-a);
+            }
             constexpr operator _Direction() const{
                 return _direc;
             }
@@ -63,9 +119,10 @@ namespace blocky{
                     case BACK:return FRONT;
                     case LEFT:return RIGHT;
                     case RIGHT:return LEFT;
-                    case TOP:return BOTTOM;
-                    case BOTTOM:return TOP;
-                    default:throw blocky_error("Internal Error on line "+std::to_string(__LINE__));
+                    case UP:return DOWN;
+                    case DOWN:return UP;
+                    case NONE:return NONE;
+                    default:throw blocky_error("Internal Error : "+std::to_string(__LINE__)+" : "+__FILE__);
                 }
             }
         private:
@@ -196,8 +253,8 @@ namespace blocky{
                 drawFace(Direction::BACK,bs,tt,loc);
                 drawFace(Direction::LEFT,bs,tt,loc);
                 drawFace(Direction::RIGHT,bs,tt,loc);
-                drawFace(Direction::TOP,bs,tt,loc);
-                drawFace(Direction::BOTTOM,bs,tt,loc);
+                drawFace(Direction::UP,bs,tt,loc);
+                drawFace(Direction::DOWN,bs,tt,loc);
             }
             virtual void drawIfNeccesary(pBlockState bs,
             const std::vector<pGameTexture>& tt,glm::vec3 loc,
@@ -207,8 +264,8 @@ namespace blocky{
                 drawFaceIfNeccesary(Direction::BACK,bs,tt,loc,back);
                 drawFaceIfNeccesary(Direction::LEFT,bs,tt,loc,left);
                 drawFaceIfNeccesary(Direction::RIGHT,bs,tt,loc,right);
-                drawFaceIfNeccesary(Direction::TOP,bs,tt,loc,top);
-                drawFaceIfNeccesary(Direction::BOTTOM,bs,tt,loc,bottom);
+                drawFaceIfNeccesary(Direction::UP,bs,tt,loc,top);
+                drawFaceIfNeccesary(Direction::DOWN,bs,tt,loc,bottom);
             };
             virtual bool phys_at(glm::ivec3 subvox) const = 0;
             virtual bool contains(glm::vec3 subpos) final{
@@ -222,7 +279,6 @@ namespace blocky{
     class SolidModel : public Model{
         public:
             virtual bool phys_at(glm::ivec3 subvox) const override{
-                if(subvox.x>7)return false;
                 return true;
             }
             virtual const pGameTexture& faceOf(Direction face,pBlockState bs,
@@ -255,9 +311,9 @@ namespace blocky{
                         }
                         break;
                     };
-                    case Direction::TOP:[[fallthrough]];
-                    case Direction::BOTTOM:{
-                        if(face==Direction::TOP){
+                    case Direction::UP:[[fallthrough]];
+                    case Direction::DOWN:{
+                        if(face==Direction::UP){
                             bleft.y += BLOCK_SIZE_GL;
                         }
                         bleft.z += BLOCK_SIZE_GL;
@@ -270,10 +326,10 @@ namespace blocky{
 
                         tright = tleft;
                         tright.x += BLOCK_SIZE_GL;
-                        if(face==Direction::TOP){
+                        if(face==Direction::UP){
                             std::swap(bright,bleft);
                             std::swap(tright,tleft);
-                        }else if(face==Direction::BOTTOM){
+                        }else if(face==Direction::DOWN){
                             std::swap(bleft,tright);
                             std::swap(tleft,bright);
                         }
@@ -421,6 +477,9 @@ virtual const pGameTexture& faceOf(Direction face,pBlockState bs,
     }
     pBlock copyBlock(pBlock src){
         return std::make_shared<Block>(*src);
+    }
+    pBlock makeBlock(std::wstring id){
+        return std::make_shared<Block>(getBlock(id));
     }
 }
 #endif// BLOCKY3DBLOCKS
