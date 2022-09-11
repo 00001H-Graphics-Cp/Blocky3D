@@ -209,9 +209,7 @@ namespace blocky{
         return std::optional<Collision>();
     }
     glm::vec3 inline fix_z(glm::vec3 in){
-        glm::vec3 fxd = in;
-        fxd.z = -fxd.z;
-        return fxd;
+        return {in.x,in.y,-in.z};
     }
     namespace{
         std::optional<bool> inline _chnk_getter_16(glm::ivec3 pos,void *usrptr){
