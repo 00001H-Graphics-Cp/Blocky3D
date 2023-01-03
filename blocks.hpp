@@ -28,6 +28,9 @@ namespace blocky{
             glm::vec3 getpos() const{return pos_;}
             glm::vec3& pos(){return pos_;}
             glm::vec3 getdims() const{return dims;}
+            float w() const{return dims.x;}
+            float l() const{return dims.z;}
+            float h() const{return dims.y;}
             bool contains(glm::vec3 point) const{
                 return inrng(point.x,pos_.x,pos_.x+dims.x)
                     && inrng(point.y,pos_.y,pos_.y+dims.y)
@@ -209,8 +212,8 @@ namespace blocky{
             const pBlockState& getState() const{
                 return state;
             }
-            void inline display_singleblock(glm::vec3 pos) const;
-            void inline display(glm::vec3 pos,
+            void inline display_singleblock(pygame::pContext3D ctx,glm::vec3 pos) const;
+            void inline display(pygame::pContext3D ctx,glm::vec3 pos,
                 pBlock infront=nullptr,pBlock atback=nullptr,
                 pBlock onleft=nullptr,pBlock onright=nullptr,
                 pBlock ontop=nullptr,pBlock atbottom=nullptr) const;
@@ -232,7 +235,7 @@ namespace blocky{
         public:
             virtual bool isFaceTransparent(Direction face,pBlockState bs,
             const std::vector<pGameTexture>& tt) const = 0;
-            virtual void drawFace(Direction face,pBlockState bs,
+            virtual void drawFace(pygame::pContext3D ctx,Direction face,pBlockState bs,
             const std::vector<pGameTexture>& tt,glm::vec3 loc) const = 0;
             virtual bool shouldCullFace(Direction face,pBlockState bs,
             const std::vector<pGameTexture>& tt,
@@ -242,30 +245,30 @@ namespace blocky{
 (next_to->isFaceTransparent(face.opposite()))
 &&(next_to->isFaceTransparent(face)));
             }
-            virtual void drawFaceIfNeccesary(Direction face,pBlockState bs,
+            virtual void drawFaceIfNeccesary(pygame::pContext3D ctx,Direction face,pBlockState bs,
             const std::vector<pGameTexture>& tt,glm::vec3 loc,
             pBlock next_to) const final{
-                if(!shouldCullFace(face,bs,tt,next_to))drawFace(face,bs,tt,loc);
+                if(!shouldCullFace(face,bs,tt,next_to))drawFace(ctx,face,bs,tt,loc);
             }
-            virtual void draw(pBlockState bs,
+            virtual void draw(pygame::pContext3D ctx,pBlockState bs,
             const std::vector<pGameTexture>& tt,glm::vec3 loc) const{
-                drawFace(Direction::FRONT,bs,tt,loc);
-                drawFace(Direction::BACK,bs,tt,loc);
-                drawFace(Direction::LEFT,bs,tt,loc);
-                drawFace(Direction::RIGHT,bs,tt,loc);
-                drawFace(Direction::UP,bs,tt,loc);
-                drawFace(Direction::DOWN,bs,tt,loc);
+                drawFace(ctx,Direction::FRONT,bs,tt,loc);
+                drawFace(ctx,Direction::BACK,bs,tt,loc);
+                drawFace(ctx,Direction::LEFT,bs,tt,loc);
+                drawFace(ctx,Direction::RIGHT,bs,tt,loc);
+                drawFace(ctx,Direction::UP,bs,tt,loc);
+                drawFace(ctx,Direction::DOWN,bs,tt,loc);
             }
-            virtual void drawIfNeccesary(pBlockState bs,
+            virtual void drawIfNeccesary(pygame::pContext3D ctx,pBlockState bs,
             const std::vector<pGameTexture>& tt,glm::vec3 loc,
             pBlock front,pBlock back,pBlock left,pBlock right,pBlock top,pBlock bottom)
             const{
-                drawFaceIfNeccesary(Direction::FRONT,bs,tt,loc,front);
-                drawFaceIfNeccesary(Direction::BACK,bs,tt,loc,back);
-                drawFaceIfNeccesary(Direction::LEFT,bs,tt,loc,left);
-                drawFaceIfNeccesary(Direction::RIGHT,bs,tt,loc,right);
-                drawFaceIfNeccesary(Direction::UP,bs,tt,loc,top);
-                drawFaceIfNeccesary(Direction::DOWN,bs,tt,loc,bottom);
+                drawFaceIfNeccesary(ctx,Direction::FRONT,bs,tt,loc,front);
+                drawFaceIfNeccesary(ctx,Direction::BACK,bs,tt,loc,back);
+                drawFaceIfNeccesary(ctx,Direction::LEFT,bs,tt,loc,left);
+                drawFaceIfNeccesary(ctx,Direction::RIGHT,bs,tt,loc,right);
+                drawFaceIfNeccesary(ctx,Direction::UP,bs,tt,loc,top);
+                drawFaceIfNeccesary(ctx,Direction::DOWN,bs,tt,loc,bottom);
             };
             virtual bool phys_at(glm::ivec3 subvox) const = 0;
             virtual bool contains(glm::vec3 subpos) final{
@@ -289,7 +292,7 @@ namespace blocky{
             const std::vector<pGameTexture>& tt) const override{
                 return faceOf(face,bs,tt)->isTransparent();
             }
-            virtual void drawFace(Direction face,pBlockState bs,
+            virtual void drawFace(pygame::pContext3D ctx,Direction face,pBlockState bs,
             const std::vector<pGameTexture>& tt,glm::vec3 loc) const override{
                 glm::vec3 bleft,bright,tleft,tright;
                 bleft = loc;
@@ -356,10 +359,8 @@ namespace blocky{
                         throw blocky_error("Internal Error at lineno "+std::to_string(__LINE__));
                     }
                 }
-                auto r3d = std::make_shared<pygame::geometry::Rect3D>(
-                bleft,bright,tleft,tright
-                );
-                pygame::draw::rect3D(r3d,faceOf(face,bs,tt)->curFrame());
+                pygame::Rect3D r3d(bleft,bright,tleft,tright);
+                pygame::draw::rect3D(ctx,r3d,faceOf(face,bs,tt)->curFrame());
             }
     };
     class OneFaceModel : public SolidModel{
@@ -376,7 +377,7 @@ virtual const pGameTexture& faceOf(Direction face,pBlockState bs,
             const std::vector<pGameTexture>& tt) const override{
                 return true;
             }
-            virtual void drawFace(Direction face,pBlockState bs,
+            virtual void drawFace(pygame::pContext3D ctx,Direction face,pBlockState bs,
             const std::vector<pGameTexture>& tt,glm::vec3 loc) const override{
                 return;
             }
@@ -464,14 +465,14 @@ virtual const pGameTexture& faceOf(Direction face,pBlockState bs,
                 return std::move(thetype);
             }
     };
-    void inline Block::display_singleblock(glm::vec3 pos) const{
-        type->getModel()->draw(state,type->getTextures(),pos);
+    void inline Block::display_singleblock(pygame::pContext3D ctx,glm::vec3 pos) const{
+        type->getModel()->draw(ctx,state,type->getTextures(),pos);
     }
-    void inline Block::display(glm::vec3 pos,
+    void inline Block::display(pygame::pContext3D ctx,glm::vec3 pos,
     pBlock infront,pBlock atback,
     pBlock onleft,pBlock onright,
     pBlock ontop,pBlock atbottom) const{
-        type->getModel()->drawIfNeccesary(state,type->getTextures(),
+        type->getModel()->drawIfNeccesary(ctx,state,type->getTextures(),
             pos,infront,atback,onleft,onright,ontop,atbottom
         );
     }

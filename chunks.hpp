@@ -31,8 +31,8 @@ namespace blocky{
             Chunk(pBlockType airType) : Chunk(std::make_shared<Block>(airType)){}
             void inline set(int x,int y,int z,pBlock tgrt);
             void inline set(glm::ivec3 pos,pBlock tgrt);
-            void inline display(pChunk left,pChunk right,pChunk front,pChunk back) const;
-            void inline displayNoCull(glm::vec3 pos) const;
+            void inline display(pygame::pContext3D ctx,pChunk left,pChunk right,pChunk front,pChunk back) const;
+            void inline displayNoCull(pygame::pContext3D ctx,glm::vec3 pos) const;
         public:
             std::optional<Collision> rayCast(glm::vec3 src,glm::vec3 rdirvec,float reach);
     };
@@ -97,13 +97,13 @@ namespace blocky{
     void Chunk::set(glm::ivec3 pos,pBlock tgrt){
         set(pos.x,pos.y,pos.z,tgrt);
     }
-    void Chunk::display(pChunk left=nullptr,pChunk right=nullptr,pChunk front=nullptr,pChunk back=nullptr) const{
+    void Chunk::display(pygame::pContext3D ctx,pChunk left=nullptr,pChunk right=nullptr,pChunk front=nullptr,pChunk back=nullptr) const{
         #define _getblock(x,y,z) (maybeAt(x,y,z,left,right,front,back).value_or(nullptr))
         #define getblock(x,y,z) _getblock((x),(y),(z))
         for(int x=0;x<CHUNK_SIZE;x++){
             for(int z=0;z<CHUNK_SIZE;z++){
                 for(int y=0;y<BUILD_LIMIT;y++){
-                    at(x,y,z)->display(chunkpos+glm::vec3(x,y,-z-1.0)*BLOCK_SIZE_GL,
+                    at(x,y,z)->display(ctx,chunkpos+glm::vec3(x,y,-z-1.0)*BLOCK_SIZE_GL,
                     getblock(x,y,z-1),getblock(x,y,z+1),
                     getblock(x-1,y,z),getblock(x+1,y,z),
                     getblock(x,y+1,z),getblock(x,y-1,z));
@@ -113,11 +113,11 @@ namespace blocky{
         #undef _getblock
         #undef getblock
     }
-    void Chunk::displayNoCull(glm::vec3 pos) const{
+    void Chunk::displayNoCull(pygame::pContext3D ctx,glm::vec3 pos) const{
         for(int x=0;x<CHUNK_SIZE;x++){
             for(int z=0;z<CHUNK_SIZE;z++){
                 for(int y=0;y<BUILD_LIMIT;y++){
-                    at(x,y,z)->display_singleblock(pos+glm::vec3(x,y,-z-1.0)*BLOCK_SIZE_GL);
+                    at(x,y,z)->display_singleblock(ctx,pos+glm::vec3(x,y,-z-1.0)*BLOCK_SIZE_GL);
                 }
             }
         }
@@ -207,9 +207,6 @@ namespace blocky{
             if(mbe.value_or(false))return Collision(investigating,src+direction*dist,Direction::from_ray(investigating,last_inves));
         }
         return std::optional<Collision>();
-    }
-    glm::vec3 inline fix_z(glm::vec3 in){
-        return {in.x,in.y,-in.z};
     }
     namespace{
         std::optional<bool> inline _chnk_getter_16(glm::ivec3 pos,void *usrptr){
